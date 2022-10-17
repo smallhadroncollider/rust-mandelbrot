@@ -88,37 +88,9 @@ fn write_image(filename: &str, pixels: &[u8], bounds: (usize, usize)) -> Result<
     Ok(())
 }
 
-fn get_args(args: &[String]) -> Result<((usize, usize), Complex<f64>, Complex<f64>), &str> {
-    let bounds = parse_pair::<usize>(&args[2], 'x').ok_or("Could not parse image dimensions")?;
-    let upper_left = parse_complex(&args[3]).ok_or("Could not parse upper left corner point")?;
-    let lower_right = parse_complex(&args[4]).ok_or("Could not parse lower right corner point")?;
+type Options = ((usize, usize), Complex<f64>, Complex<f64>);
 
-    Ok((bounds, upper_left, lower_right))
-}
-
-fn usage(args: &[String]) {
-    writeln!(std::io::stderr(), "Usage: {} FILE PIXELS UPPERLEFT LOWERRIGHT", args[0]).unwrap();
-    writeln!(std::io::stderr(), "Example: {} mandel.png 1000x750 -1.2,0.35 -1.0,0.2", args[0]).unwrap();
-    std::process::exit(1);
-}
-
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-
-    if args.len() != 5 {
-        return usage(&args);
-    }
-
-    let (bounds, upper_left, lower_right) = match get_args(&args) {
-        Ok(n) => n,
-        Err(e) => {
-            writeln!(std::io::stderr(), "{}", e).unwrap();
-            return usage(&args);
-        }
-    };
-
-    let mut pixels = vec![0; bounds.0 * bounds.1];
-
+fn generate_pixels(pixels: &mut Vec<u8>, (bounds, upper_left, lower_right): Options) {
     let threads = num_cpus::get();
     let rows_per_band = bounds.1 / threads + 1;
 
@@ -140,6 +112,40 @@ fn main() {
             }
         });
     }
+}
 
-    write_image(&args[1], &pixels, bounds).expect("error writing PNG file");
+fn get_args(args: &[String]) -> Result<Options, &str> {
+    let bounds = parse_pair::<usize>(&args[2], 'x').ok_or("Could not parse image dimensions")?;
+    let upper_left = parse_complex(&args[3]).ok_or("Could not parse upper left corner point")?;
+    let lower_right = parse_complex(&args[4]).ok_or("Could not parse lower right corner point")?;
+
+    Ok((bounds, upper_left, lower_right))
+}
+
+fn usage(args: &[String]) {
+    writeln!(std::io::stderr(), "Usage: {} FILE PIXELS UPPERLEFT LOWERRIGHT", args[0]).unwrap();
+    writeln!(std::io::stderr(), "Example: {} mandel.png 1000x750 -1.2,0.35 -1.0,0.2", args[0]).unwrap();
+    std::process::exit(1);
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    if args.len() != 5 {
+        return usage(&args);
+    }
+
+    let filename = &args[1];
+
+    let options @ (bounds, _, _) = match get_args(&args) {
+        Ok(n) => n,
+        Err(e) => {
+            writeln!(std::io::stderr(), "{}", e).unwrap();
+            return usage(&args);
+        }
+    };
+
+    let mut pixels = vec![0; bounds.0 * bounds.1];
+    generate_pixels(&mut pixels, options);
+    write_image(filename, &pixels, options.0).expect("error writing PNG file");
 }

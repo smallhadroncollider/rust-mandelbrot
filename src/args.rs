@@ -1,6 +1,6 @@
 use std::io::Write;
-use num::Complex;
 use std::str::FromStr;
+use num::Complex;
 
 pub type Options = ((usize, usize), Complex<f64>, Complex<f64>);
 
@@ -31,7 +31,7 @@ pub fn usage(command: &String) {
     std::process::exit(1);
 }
 
-pub fn parse_args() -> Result<(String, Options), String> {
+pub fn parse() -> Result<(String, Options), String> {
     // get command-line arguments
     let args: Vec<String> = std::env::args().collect();
     let command = args[0].to_owned();

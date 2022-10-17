@@ -1,24 +1,21 @@
 use std::io::Write;
 
-use crate::mandelbrot::generate_pixels;
-use crate::io::write_image;
-use crate::args::{
-    parse_args,
-    usage,
-};
+use crate::mandelbrot as mandelbrot;
+use crate::io as io;
+use crate::args as args;
 
 pub fn go() -> () {
     // get command-line arguments
-    let (filename, options) = match parse_args() {
+    let (filename, options) = match args::parse() {
         Ok(n) => n,
         Err(command) => {
-            return usage(&command);
+            return args::usage(&command);
         },
     };
 
     // generate the image
-    let pixels = generate_pixels(options);
-    match write_image(&filename, &pixels, options.0) {
+    let pixels = mandelbrot::generate_pixels(options);
+    match io::write_image(&filename, &pixels, options.0) {
         Ok(_) => (),
         Err(_) => writeln!(std::io::stderr(), "Error writing PNG file").unwrap(),
     };

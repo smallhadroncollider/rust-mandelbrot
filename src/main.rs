@@ -108,7 +108,13 @@ fn generate_pixels(pixels: &mut Vec<u8>, (bounds, upper_left, lower_right): Opti
     }
 }
 
-fn get_args(args: &[String]) -> Result<Options, &str> {
+fn generate_image(filename: &str, options @ (bounds, _, _): Options) -> Result<(), &str> {
+    let mut pixels = vec![0; bounds.0 * bounds.1];
+    generate_pixels(&mut pixels, options);
+    write_image(filename, &pixels, options.0).map_err(|_| "Error writing PNG file")
+}
+
+fn get_options(args: &[String]) -> Result<Options, &str> {
     let bounds = parse_pair::<usize>(&args[2], 'x').ok_or("Could not parse image dimensions")?;
     let upper_left = parse_complex(&args[3]).ok_or("Could not parse upper left corner point")?;
     let lower_right = parse_complex(&args[4]).ok_or("Could not parse lower right corner point")?;
@@ -131,7 +137,7 @@ fn main() {
 
     let filename = &args[1];
 
-    let options @ (bounds, _, _) = match get_args(&args) {
+    let options = match get_options(&args) {
         Ok(n) => n,
         Err(e) => {
             writeln!(std::io::stderr(), "{}", e).unwrap();
@@ -139,7 +145,8 @@ fn main() {
         }
     };
 
-    let mut pixels = vec![0; bounds.0 * bounds.1];
-    generate_pixels(&mut pixels, options);
-    write_image(filename, &pixels, options.0).expect("error writing PNG file");
+    match generate_image(&filename, options) {
+        Err(e) => writeln!(std::io::stderr(), "{}", e).unwrap(),
+        Ok(_) => ()
+    };
 }

@@ -3,6 +3,7 @@ extern crate image;
 extern crate crossbeam;
 extern crate num_cpus;
 
+use std::io::Write;
 use num::Complex;
 use std::str::FromStr;
 use image::ColorType;
@@ -87,16 +88,34 @@ fn write_image(filename: &str, pixels: &[u8], bounds: (usize, usize)) -> Result<
     Ok(())
 }
 
+fn get_args(args: &[String]) -> Result<((usize, usize), Complex<f64>, Complex<f64>), &str> {
+    let bounds = parse_pair::<usize>(&args[2], 'x').ok_or("Could not parse image dimensions")?;
+    let upper_left = parse_complex(&args[3]).ok_or("Could not parse upper left corner point")?;
+    let lower_right = parse_complex(&args[4]).ok_or("Could not parse lower right corner point")?;
+
+    Ok((bounds, upper_left, lower_right))
+}
+
+fn usage(args: &[String]) {
+    writeln!(std::io::stderr(), "Usage: {} FILE PIXELS UPPERLEFT LOWERRIGHT", args[0]).unwrap();
+    writeln!(std::io::stderr(), "Example: {} mandel.png 1000x750 -1.2,0.35 -1.0,0.2", args[0]).unwrap();
+    std::process::exit(1);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
 
     if args.len() != 5 {
-        std::process::exit(1);
+        return usage(&args);
     }
 
-    let bounds: (usize, usize) = parse_pair::<usize>(&args[2], 'x').expect("error parsing image dimensions");
-    let upper_left = parse_complex(&args[3]).expect("error parsing upper left corner point");
-    let lower_right = parse_complex(&args[4]).expect("error parsing lower right corner point");
+    let (bounds, upper_left, lower_right) = match get_args(&args) {
+        Ok(n) => n,
+        Err(e) => {
+            writeln!(std::io::stderr(), "{}", e).unwrap();
+            return usage(&args);
+        }
+    };
 
     let mut pixels = vec![0; bounds.0 * bounds.1];
 

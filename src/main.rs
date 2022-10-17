@@ -10,6 +10,8 @@ use image::ColorType;
 use image::png::PNGEncoder;
 use std::fs::File;
 
+type Options = ((usize, usize), Complex<f64>, Complex<f64>);
+
 fn escape_time(c: Complex<f64>, limit: u32) -> Option<u32> {
     let mut z = Complex { re: 0., im: 0. };
 
@@ -81,9 +83,9 @@ fn write_image(filename: &str, pixels: &[u8], bounds: (usize, usize)) -> Result<
     Ok(())
 }
 
-type Options = ((usize, usize), Complex<f64>, Complex<f64>);
+fn generate_pixels((bounds, upper_left, lower_right): Options) -> Vec<u8> {
+    let mut pixels = vec![0; bounds.0 * bounds.1];
 
-fn generate_pixels(pixels: &mut Vec<u8>, (bounds, upper_left, lower_right): Options) {
     let threads = num_cpus::get();
     let rows_per_band = bounds.1 / threads + 1;
     let bands: Vec<&mut [u8]> = pixels.chunks_mut(rows_per_band * bounds.0).collect();
@@ -102,11 +104,12 @@ fn generate_pixels(pixels: &mut Vec<u8>, (bounds, upper_left, lower_right): Opti
             });
         }
     });
+
+    pixels
 }
 
-fn generate_image(filename: &str, options @ (bounds, _, _): Options) -> Result<(), &str> {
-    let mut pixels = vec![0; bounds.0 * bounds.1];
-    generate_pixels(&mut pixels, options);
+fn generate_image(filename: &str, options: Options) -> Result<(), &str> {
+    let pixels = generate_pixels(options);
     write_image(filename, &pixels, options.0).map_err(|_| "Error writing PNG file")
 }
 
@@ -152,12 +155,12 @@ fn main() {
         Ok(n) => n,
         Err(command) => {
             return usage(&command);
-        }
+        },
     };
 
     // generate the image
     match generate_image(&filename, options) {
+        Ok(_) => (),
         Err(e) => writeln!(std::io::stderr(), "{}", e).unwrap(),
-        Ok(_) => ()
     };
 }

@@ -76,8 +76,7 @@ fn write_image(filename: &str, pixels: &[u8], bounds: (usize, usize)) -> Result<
     let output = File::create(filename)?;
 
     let encoder = PNGEncoder::new(output);
-    encoder.encode(&pixels, bounds.0 as u32, bounds.1 as u32,
-                   ColorType::Gray(8))?;
+    encoder.encode(&pixels, bounds.0 as u32, bounds.1 as u32, ColorType::Gray(8))?;
 
     Ok(())
 }
@@ -87,25 +86,22 @@ type Options = ((usize, usize), Complex<f64>, Complex<f64>);
 fn generate_pixels(pixels: &mut Vec<u8>, (bounds, upper_left, lower_right): Options) {
     let threads = num_cpus::get();
     let rows_per_band = bounds.1 / threads + 1;
+    let bands: Vec<&mut [u8]> = pixels.chunks_mut(rows_per_band * bounds.0).collect();
 
-    {
-        let bands: Vec<&mut [u8]> =
-            pixels.chunks_mut(rows_per_band * bounds.0).collect();
+    crossbeam::scope(| spawner | {
+        for (i, band) in bands.into_iter().enumerate() {
+            let top = rows_per_band * i;
+            let height = band.len() / bounds.0;
 
-        crossbeam::scope(| spawner | {
-            for (i, band) in bands.into_iter().enumerate() {
-                let top = rows_per_band * i;
-                let height = band.len() / bounds.0;
-                let band_bounds = (bounds.0, height);
-                let band_upper_left = pixel_to_point(bounds, (0, top), upper_left, lower_right);
-                let band_lower_right = pixel_to_point(bounds, (bounds.0, top + height), upper_left, lower_right);
+            let band_bounds = (bounds.0, height);
+            let band_upper_left = pixel_to_point(bounds, (0, top), upper_left, lower_right);
+            let band_lower_right = pixel_to_point(bounds, (bounds.0, top + height), upper_left, lower_right);
 
-                spawner.spawn(move || {
-                    render(band, band_bounds, band_upper_left, band_lower_right);
-                });
-            }
-        });
-    }
+            spawner.spawn(move || {
+                render(band, band_bounds, band_upper_left, band_lower_right);
+            });
+        }
+    });
 }
 
 fn generate_image(filename: &str, options @ (bounds, _, _): Options) -> Result<(), &str> {
@@ -114,7 +110,7 @@ fn generate_image(filename: &str, options @ (bounds, _, _): Options) -> Result<(
     write_image(filename, &pixels, options.0).map_err(|_| "Error writing PNG file")
 }
 
-fn get_options(args: &[String]) -> Result<Options, &str> {
+fn parse_options(args: &[String]) -> Result<Options, &str> {
     let bounds = parse_pair::<usize>(&args[2], 'x').ok_or("Could not parse image dimensions")?;
     let upper_left = parse_complex(&args[3]).ok_or("Could not parse upper left corner point")?;
     let lower_right = parse_complex(&args[4]).ok_or("Could not parse lower right corner point")?;
@@ -122,29 +118,44 @@ fn get_options(args: &[String]) -> Result<Options, &str> {
     Ok((bounds, upper_left, lower_right))
 }
 
-fn usage(args: &[String]) {
-    writeln!(std::io::stderr(), "Usage: {} FILE PIXELS UPPERLEFT LOWERRIGHT", args[0]).unwrap();
-    writeln!(std::io::stderr(), "Example: {} mandel.png 1000x750 -1.2,0.35 -1.0,0.2", args[0]).unwrap();
+fn usage(command: &String) {
+    writeln!(std::io::stderr(), "Usage: {} FILE PIXELS UPPERLEFT LOWERRIGHT", command).unwrap();
+    writeln!(std::io::stderr(), "Example: {} mandel.png 1000x750 -1.2,0.35 -1.0,0.2", command).unwrap();
     std::process::exit(1);
 }
 
-fn main() {
+fn parse_args() -> Result<(String, Options), String> {
+    // get command-line arguments
     let args: Vec<String> = std::env::args().collect();
+    let command = args[0].to_owned();
 
     if args.len() != 5 {
-        return usage(&args);
+        return Err(command);
     }
 
-    let filename = &args[1];
+    let filename = args[1].to_owned();
 
-    let options = match get_options(&args) {
+    let options = match parse_options(&args) {
         Ok(n) => n,
         Err(e) => {
             writeln!(std::io::stderr(), "{}", e).unwrap();
-            return usage(&args);
+            return Err(command);
         }
     };
 
+    Ok((filename, options))
+}
+
+fn main() {
+    // get command-line arguments
+    let (filename, options) = match parse_args() {
+        Ok(n) => n,
+        Err(command) => {
+            return usage(&command);
+        }
+    };
+
+    // generate the image
     match generate_image(&filename, options) {
         Err(e) => writeln!(std::io::stderr(), "{}", e).unwrap(),
         Ok(_) => ()
